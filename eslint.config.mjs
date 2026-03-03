@@ -11,6 +11,7 @@ export default [
       "build/**",
       ".plasmo/**",
       "node_modules/**",
+      ".spec-workflow/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",
     ],
