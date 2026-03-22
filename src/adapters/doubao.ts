@@ -15,6 +15,7 @@
  * - 统一使用 chatPathPattern 提取会话 ID
  */
 import { SITE_IDS } from "~constants"
+import { htmlToMarkdown } from "~utils/exporter"
 
 import {
   SiteAdapter,
@@ -410,6 +411,33 @@ export class DoubaoAdapter extends SiteAdapter {
 
   getChatContentSelectors(): string[] {
     return ['[data-testid="receive_message"] .flow-markdown-body', USER_QUERY_TEXT_SELECTOR]
+  }
+
+  private extractAssistantMarkdown(element: Element): string {
+    const markdown = element.matches(".flow-markdown-body")
+      ? element
+      : element.querySelector(".flow-markdown-body")
+    const target = (markdown || element).cloneNode(true) as HTMLElement
+
+    target
+      .querySelectorAll('button, [role="button"], svg, [aria-hidden="true"]')
+      .forEach((node) => node.remove())
+
+    const content = htmlToMarkdown(target).trim()
+    if (content) {
+      return content
+    }
+
+    return this.extractTextWithLineBreaks(target).trim()
+  }
+
+  getLatestReplyText(): string | null {
+    const responses = document.querySelectorAll('[data-testid="receive_message"]')
+    if (responses.length === 0) return null
+
+    const last = responses[responses.length - 1]
+    const text = this.extractAssistantMarkdown(last)
+    return text || null
   }
 
   private getUserMessageTextContainer(element: Element): HTMLElement | null {
