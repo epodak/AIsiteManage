@@ -1,61 +1,134 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 
-import brightAlertNotificationSound from "../../../assets/notification-sounds/bright-alert.ogg?inline"
-import glassPingNotificationSound from "../../../assets/notification-sounds/glass-ping.ogg?inline"
-import softChimeNotificationSound from "../../../assets/notification-sounds/soft-chime.ogg?inline"
-import defaultNotificationSound from "../../../assets/notification-sounds/streaming-complete-v2.mp3?inline"
-// 导入样式为内联字符串（用于注入到 Shadow DOM）
-// 使用相对路径避免别名解析问题
-import mainStyle from "../../style.css?inline"
-import conversationsStyle from "../../styles/conversations.css?inline"
-import settingsStyle from "../../styles/settings.css?inline"
-import themeVariablesStyle from "../../styles/theme-variables.css?inline"
+import { USERSCRIPT_RESOURCE_DEFINITIONS } from "./resource-manifest"
 
-function createMediaObjectUrl(source: string): string {
-  if (!source.startsWith("data:")) {
-    return source
+const USERSCRIPT_OBJECT_URLS = new Set<string>()
+
+const USERSCRIPT_AUDIO_RESOURCE_NAMES = new Set<string>(
+  Object.values(USERSCRIPT_RESOURCE_DEFINITIONS)
+    .filter(({ fileName }) => /\.(mp3|ogg)$/i.test(fileName))
+    .map(({ metaName }) => metaName),
+)
+
+const USERSCRIPT_RESOURCE_MIME_TYPES = Object.fromEntries(
+  Object.values(USERSCRIPT_RESOURCE_DEFINITIONS).map(({ metaName, fileName }) => {
+    const extension = fileName.split(".").pop()?.toLowerCase()
+    const mimeType =
+      extension === "css"
+        ? "text/css"
+        : extension === "png"
+          ? "image/png"
+          : extension === "mp3"
+            ? "audio/mpeg"
+            : extension === "ogg"
+              ? "audio/ogg"
+              : "application/octet-stream"
+
+    return [metaName, mimeType]
+  }),
+)
+
+function decodeBase64ToBytes(base64Data: string): Uint8Array {
+  const binary = atob(base64Data)
+  const bytes = new Uint8Array(binary.length)
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
   }
 
-  const match = source.match(/^data:([^;,]+)?(;base64)?,(.*)$/)
-  if (!match) {
-    return source
-  }
-
-  const mimeType = match[1] || "application/octet-stream"
-  const isBase64 = Boolean(match[2])
-  const payload = match[3] || ""
-
-  let bytes: Uint8Array
-  if (isBase64) {
-    const binary = atob(payload)
-    bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-  } else {
-    bytes = new TextEncoder().encode(decodeURIComponent(payload))
-  }
-
-  return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+  return bytes
 }
+
+function normalizeUserscriptResourceUrl(resourceName: string, resourceUrl: string): string {
+  if (!resourceUrl.startsWith("data:") || !USERSCRIPT_AUDIO_RESOURCE_NAMES.has(resourceName)) {
+    return resourceUrl
+  }
+
+  try {
+    const separatorIndex = resourceUrl.indexOf(",")
+    if (separatorIndex === -1) {
+      return resourceUrl
+    }
+
+    const metadata = resourceUrl.slice(5, separatorIndex)
+    const payload = resourceUrl.slice(separatorIndex + 1)
+    const metadataSegments = metadata.split(";").filter(Boolean)
+    const rawMimeType = metadataSegments[0] || ""
+    const mimeType =
+      USERSCRIPT_RESOURCE_MIME_TYPES[resourceName as keyof typeof USERSCRIPT_RESOURCE_MIME_TYPES] ||
+      rawMimeType ||
+      "application/octet-stream"
+    const bytes = metadataSegments.includes("base64")
+      ? decodeBase64ToBytes(payload)
+      : new TextEncoder().encode(decodeURIComponent(payload))
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+
+    USERSCRIPT_OBJECT_URLS.add(blobUrl)
+    return blobUrl
+  } catch (error) {
+    console.warn(`[Ophel] Failed to normalize userscript resource URL: ${resourceName}`, error)
+    return resourceUrl
+  }
+}
+
+function cleanupUserscriptObjectUrls(): void {
+  for (const objectUrl of USERSCRIPT_OBJECT_URLS) {
+    URL.revokeObjectURL(objectUrl)
+  }
+
+  USERSCRIPT_OBJECT_URLS.clear()
+}
+
+function getUserscriptResourceText(resourceName: string): string {
+  try {
+    return GM_getResourceText(resourceName)
+  } catch (error) {
+    console.warn(`[Ophel] Failed to load userscript text resource: ${resourceName}`, error)
+    return ""
+  }
+}
+
+function getUserscriptResourceUrl(resourceName: string): string | undefined {
+  try {
+    const resourceUrl = GM_getResourceURL(resourceName)
+    return resourceUrl ? normalizeUserscriptResourceUrl(resourceName, resourceUrl) : undefined
+  } catch (error) {
+    console.warn(`[Ophel] Failed to load userscript URL resource: ${resourceName}`, error)
+    return undefined
+  }
+}
+
+const userscriptStyleText = getUserscriptResourceText(
+  USERSCRIPT_RESOURCE_DEFINITIONS.styles.metaName,
+)
 
 const notificationSoundUrls = {
-  default: createMediaObjectUrl(defaultNotificationSound),
-  softChime: createMediaObjectUrl(softChimeNotificationSound),
-  glassPing: createMediaObjectUrl(glassPingNotificationSound),
-  brightAlert: createMediaObjectUrl(brightAlertNotificationSound),
+  default: getUserscriptResourceUrl(USERSCRIPT_RESOURCE_DEFINITIONS.notificationDefault.metaName),
+  softChime: getUserscriptResourceUrl(
+    USERSCRIPT_RESOURCE_DEFINITIONS.notificationSoftChime.metaName,
+  ),
+  glassPing: getUserscriptResourceUrl(
+    USERSCRIPT_RESOURCE_DEFINITIONS.notificationGlassPing.metaName,
+  ),
+  brightAlert: getUserscriptResourceUrl(
+    USERSCRIPT_RESOURCE_DEFINITIONS.notificationBrightAlert.metaName,
+  ),
 }
 
-window.__OPHEL_NOTIFICATION_SOUND_URLS__ = notificationSoundUrls
+window.__OPHEL_NOTIFICATION_SOUND_URLS__ = Object.fromEntries(
+  Object.entries(notificationSoundUrls).filter(
+    ([, url]) => typeof url === "string" && url.length > 0,
+  ),
+)
 
-window.addEventListener("unload", () => {
-  Object.values(notificationSoundUrls).forEach((url) => {
-    if (url.startsWith("blob:")) {
-      URL.revokeObjectURL(url)
-    }
-  })
-})
+window.__OPHEL_USERSCRIPT_ASSET_URLS__ = {
+  icon: getUserscriptResourceUrl(USERSCRIPT_RESOURCE_DEFINITIONS.icon.metaName) || "",
+  watermarkBg48:
+    getUserscriptResourceUrl(USERSCRIPT_RESOURCE_DEFINITIONS.watermarkBg48.metaName) || "",
+  watermarkBg96:
+    getUserscriptResourceUrl(USERSCRIPT_RESOURCE_DEFINITIONS.watermarkBg96.metaName) || "",
+}
 
 /**
  * Ophel - Userscript Entry Point
@@ -308,16 +381,7 @@ async function init() {
       const shadowRoot = shadowHost.attachShadow({ mode: "open" })
 
       const styleEl = document.createElement("style")
-      const sanitizedMainStyle = mainStyle.replace(
-        /@import\s+["'][^"']*theme-variables\.css["'];?\s*/g,
-        "",
-      )
-      styleEl.textContent = [
-        themeVariablesStyle,
-        sanitizedMainStyle,
-        conversationsStyle,
-        settingsStyle,
-      ].join("\n")
+      styleEl.textContent = userscriptStyleText
       shadowRoot.appendChild(styleEl)
 
       const container = document.createElement("div")
@@ -413,6 +477,7 @@ async function init() {
   initUrlChangeObserver(ctx)
 
   window.addEventListener("unload", cleanupMountWatchers)
+  window.addEventListener("unload", cleanupUserscriptObjectUrls)
 }
 
 // 启动

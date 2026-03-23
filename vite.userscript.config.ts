@@ -1,9 +1,16 @@
 // @ts-nocheck
+import { createHash } from "crypto"
 import * as fs from "fs"
 import * as path from "path"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import monkey from "vite-plugin-monkey"
+
+import {
+  USERSCRIPT_RESOURCE_DEFINITIONS,
+  type UserscriptResourceMetaName,
+  getUserscriptResourceUrls,
+} from "./src/platform/userscript/resource-manifest"
 
 // ========== Dynamic Metadata Loading ==========
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8"))
@@ -62,10 +69,147 @@ function validateUserscriptMetadata(metadata: UserscriptMetadata) {
 
 validateUserscriptMetadata(userscriptMetadata)
 
+const userscriptBuildOutDir = path.resolve(__dirname, "build/userscript")
+const userscriptAssetOutDirName = "userscript-assets"
+const userscriptAssetOutDir = path.join(userscriptBuildOutDir, userscriptAssetOutDirName)
+const userscriptAssetManifestFileName = "manifest.json"
+
+const userscriptAssetSources = {
+  icon: path.resolve(__dirname, "assets/icon.png"),
+  notificationDefault: path.resolve(
+    __dirname,
+    "assets/notification-sounds/streaming-complete-v2.mp3",
+  ),
+  notificationSoftChime: path.resolve(
+    __dirname,
+    "assets/notification-sounds/soft-chime.ogg",
+  ),
+  notificationGlassPing: path.resolve(
+    __dirname,
+    "assets/notification-sounds/glass-ping.ogg",
+  ),
+  notificationBrightAlert: path.resolve(
+    __dirname,
+    "assets/notification-sounds/bright-alert.ogg",
+  ),
+  watermarkBg48: path.resolve(
+    __dirname,
+    "assets/userscript/ophel-watermark-bg-48.png",
+  ),
+  watermarkBg96: path.resolve(
+    __dirname,
+    "assets/userscript/ophel-watermark-bg-96.png",
+  ),
+} as const
+
+function buildUserscriptStyleBundle(): string {
+  const themeVariablesStyle = fs.readFileSync(
+    path.resolve(__dirname, "src/styles/theme-variables.css"),
+    "utf-8",
+  )
+  const mainStyle = fs
+    .readFileSync(path.resolve(__dirname, "src/style.css"), "utf-8")
+    .replace(/@import\s+["'][^"']*theme-variables\.css["'];?\s*/g, "")
+  const conversationsStyle = fs.readFileSync(
+    path.resolve(__dirname, "src/styles/conversations.css"),
+    "utf-8",
+  )
+  const settingsStyle = fs.readFileSync(
+    path.resolve(__dirname, "src/styles/settings.css"),
+    "utf-8",
+  )
+
+  return [themeVariablesStyle, mainStyle, conversationsStyle, settingsStyle].join("\n")
+}
+
+function createContentHash(content: string | Buffer): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 12)
+}
+
+function createHashedFileName(fileName: string, content: string | Buffer): string {
+  const ext = path.extname(fileName)
+  const baseName = fileName.slice(0, fileName.length - ext.length)
+  return `${baseName}.${createContentHash(content)}${ext}`
+}
+
+function readUserscriptAssetContent(
+  key: keyof typeof USERSCRIPT_RESOURCE_DEFINITIONS,
+): string | Buffer {
+  if (key === "styles") {
+    return buildUserscriptStyleBundle()
+  }
+
+  return fs.readFileSync(userscriptAssetSources[key])
+}
+
+const userscriptResourceFiles = Object.fromEntries(
+  Object.entries(USERSCRIPT_RESOURCE_DEFINITIONS).map(([key, definition]) => {
+    const content = readUserscriptAssetContent(key as keyof typeof USERSCRIPT_RESOURCE_DEFINITIONS)
+    const fileName = createHashedFileName(definition.fileName, content)
+
+    return [
+      key,
+      {
+        ...definition,
+        content,
+        fileName,
+        relativePath: `${userscriptAssetOutDirName}/${fileName}`,
+      },
+    ]
+  }),
+) as Record<
+  keyof typeof USERSCRIPT_RESOURCE_DEFINITIONS,
+  {
+    metaName: UserscriptResourceMetaName
+    fileName: string
+    content: string | Buffer
+    relativePath: string
+  }
+>
+
+const userscriptResourcePaths = Object.fromEntries(
+  Object.values(userscriptResourceFiles).map(({ metaName, relativePath }) => [metaName, relativePath]),
+) as Record<UserscriptResourceMetaName, string>
+
+function emitUserscriptAssets(): Plugin {
+  return {
+    name: "ophel-userscript-assets",
+    writeBundle() {
+      fs.mkdirSync(userscriptAssetOutDir, { recursive: true })
+
+      for (const { relativePath, content } of Object.values(userscriptResourceFiles)) {
+        fs.writeFileSync(path.join(userscriptBuildOutDir, relativePath), content)
+      }
+
+      fs.writeFileSync(
+        path.join(userscriptAssetOutDir, userscriptAssetManifestFileName),
+        JSON.stringify(
+          {
+            generatedAt: new Date().toISOString(),
+            version,
+            resources: Object.fromEntries(
+              Object.values(userscriptResourceFiles).map(({ metaName, fileName, relativePath }) => [
+                metaName,
+                { fileName, relativePath },
+              ]),
+            ),
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      )
+    },
+  }
+}
+
+const userscriptResourceUrls = getUserscriptResourceUrls(userscriptResourcePaths)
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    emitUserscriptAssets(),
     monkey({
       entry: "src/platform/userscript/entry.tsx",
       userscript: {
@@ -92,6 +236,8 @@ export default defineConfig({
           "https://chat.z.ai/*",
         ],
         grant: [
+          "GM_getResourceText",
+          "GM_getResourceURL",
           "GM_getValue",
           "GM_setValue",
           "GM_deleteValue",
@@ -111,6 +257,7 @@ export default defineConfig({
         homepageURL: "https://github.com/urzeye/ophel",
         supportURL: "https://github.com/urzeye/ophel/issues",
         require: ["https://cdn.jsdelivr.net/npm/fuzzysort@3.1.0/fuzzysort.min.js"],
+        resource: userscriptResourceUrls,
       },
       build: {
         // CSS 自动注入到 head
