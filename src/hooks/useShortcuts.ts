@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 
 import type { SiteAdapter } from "~adapters/base"
-import { SHORTCUT_ACTIONS, type ShortcutActionId } from "~constants/shortcuts"
+import { SHORTCUT_ACTIONS, isMacOS, type ShortcutActionId } from "~constants/shortcuts"
 import type { ConversationManager } from "~core/conversation-manager"
 import type { OutlineManager } from "~core/outline-manager"
 import { getShortcutManager } from "~core/shortcut-manager"
@@ -431,18 +431,24 @@ export function useShortcuts({
     showToast(t("locatingConversation") || "正在定位当前会话...")
   }, [adapter, settings, isPanelVisible, isSnapped, onPanelToggle, onShowSnappedPanel])
 
-  // 新会话（触发 Ctrl+Shift+O）
+  // 新会话（主修饰键 + Shift + O）
   const newConversation = useCallback(() => {
-    // 模拟 Ctrl+Shift+O 快捷键
+    if (adapter?.startNewConversation()) {
+      return
+    }
+
+    // 保留旧兜底，兼容少数仍监听站点原生快捷键的页面
+    const isMac = isMacOS()
     const event = new KeyboardEvent("keydown", {
       key: "o",
       code: "KeyO",
-      ctrlKey: true,
+      ctrlKey: !isMac,
+      metaKey: isMac,
       shiftKey: true,
       bubbles: true,
     })
     document.dispatchEvent(event)
-  }, [])
+  }, [adapter])
 
   // 导出对话
   const exportConversation = useCallback(async () => {
@@ -508,7 +514,13 @@ export function useShortcuts({
   // 停止生成 (Alt+K)
   const stopGeneration = useCallback(() => {
     if (!adapter) return
-    // 查找停止按钮并点击
+
+    if (adapter.stopGeneration()) {
+      showToast(t("generationStopped") || "已停止生成")
+      return
+    }
+
+    // 保留旧兜底，降低未覆写站点的回归风险
     const stopSelectors = [
       '[data-testid="stop-button"]',
       'button[aria-label*="Stop"]',

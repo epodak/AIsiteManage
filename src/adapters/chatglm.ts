@@ -301,6 +301,10 @@ export class ChatGLMAdapter extends SiteAdapter {
     return !this.getSessionId()
   }
 
+  getNewChatButtonSelectors(): string[] {
+    return [".new-session", 'div[class~="new-session"]']
+  }
+
   getNewTabUrl(): string {
     return new URL(NEW_TAB_PATH, window.location.origin).toString()
   }
@@ -501,6 +505,18 @@ export class ChatGLMAdapter extends SiteAdapter {
     }
 
     return false
+  }
+
+  getStopButtonSelectors(): string[] {
+    return [
+      ".stop-generate",
+      ".stop-answer-default",
+      ".stop-stream-tip",
+      ".answer-content-wrap .generating-icon",
+      ".enter-icon-container.stop",
+      ".enter.searching",
+      ".enter.is-main-chat.searching",
+    ]
   }
 
   getModelName(): string | null {
