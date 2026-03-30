@@ -21,6 +21,7 @@ import {
   type ConversationInfo,
   type ConversationObserverConfig,
   type ExportConfig,
+  type ExportLifecycleContext,
   type MarkdownFixerConfig,
   type OutlineItem,
   type SiteDeleteConversationResult,
@@ -84,8 +85,6 @@ export const AISTUDIO_MODELS: AIStudioModel[] = [
   { id: "models/veo-2.0-generate-001", name: "Veo 2", category: "Veo" },
 ]
 
-const DEFAULT_TITLE = "Google AI Studio"
-
 const AISTUDIO_DELETE_REASON = {
   UI_FAILED: "delete_ui_failed",
   BATCH_ABORTED_AFTER_UI_FAILURE: "delete_batch_aborted_after_ui_failure",
@@ -128,6 +127,25 @@ const AISTUDIO_RPC_SERVICE_PATH =
   "/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService"
 const AISTUDIO_DELETE_PROMPT_METHOD = "DeletePrompt"
 const AISTUDIO_FALLBACK_RPC_ORIGIN = "https://alkalimakersuite-pa.clients6.google.com"
+const AISTUDIO_TURN_SELECTOR = "ms-chat-turn"
+const AISTUDIO_ASSISTANT_FRAGMENT_SELECTOR = ".chat-turn-container.model, .model-prompt-container"
+const AISTUDIO_ASSISTANT_SELECTOR = ".chat-turn-container.model"
+const AISTUDIO_THOUGHT_SELECTOR = "ms-thought-chunk"
+const AISTUDIO_EXPORT_ROOT_ATTR = "data-gh-aistudio-export-root"
+const AISTUDIO_EXPORT_TURN_ATTR = "data-gh-aistudio-export-turn"
+const AISTUDIO_EXPORT_ROLE_ATTR = "data-gh-aistudio-export-role"
+const AISTUDIO_EXPORT_ROLE_USER = "user"
+const AISTUDIO_EXPORT_ROLE_ASSISTANT = "assistant"
+const AISTUDIO_EXPORT_TURN_SELECTOR = `[${AISTUDIO_EXPORT_ROOT_ATTR}="1"] [${AISTUDIO_EXPORT_TURN_ATTR}="1"]`
+const AISTUDIO_EXPORT_USER_SELECTOR = `[${AISTUDIO_EXPORT_ROOT_ATTR}="1"] [${AISTUDIO_EXPORT_ROLE_ATTR}="${AISTUDIO_EXPORT_ROLE_USER}"]`
+const AISTUDIO_EXPORT_ASSISTANT_SELECTOR = `[${AISTUDIO_EXPORT_ROOT_ATTR}="1"] [${AISTUDIO_EXPORT_ROLE_ATTR}="${AISTUDIO_EXPORT_ROLE_ASSISTANT}"]`
+
+interface AIStudioExportMessageSnapshot {
+  role: "user" | "assistant"
+  turnKey: string
+  order: number
+  content: string
+}
 
 export class AIStudioAdapter extends SiteAdapter {
   // ==================== 缓存属性 ====================
@@ -136,6 +154,9 @@ export class AIStudioAdapter extends SiteAdapter {
   private cachedLibraryConversations: ConversationInfo[] | null = null
   private cachedApiKey: string | null = null
   private cachedRpcOrigin: string | null = null
+  private exportSnapshotRoot: HTMLElement | null = null
+  private exportSnapshotActive = false
+  private exportIncludeThoughtsOverride: boolean | null = null
 
   // ==================== 基础信息 ====================
 
@@ -206,22 +227,28 @@ export class AIStudioAdapter extends SiteAdapter {
     return null
   }
 
-  getSessionName(): string | null {
-    // 从页面标题获取
-    const title = document.title
-    if (title && !title.includes(DEFAULT_TITLE)) {
-      return title.replace(` | ${DEFAULT_TITLE}`, "").trim()
+  private getCurrentConversationTitleFromSources(): string | null {
+    const sessionId = this.getSessionId()
+    if (!sessionId) return null
+
+    const matched = this.getConversationList().find((item) => item.id === sessionId)
+    if (matched?.title?.trim()) {
+      return matched.title.trim()
     }
-    return super.getSessionName()
+
+    const link = document.querySelector(
+      `a.prompt-link[href*="/prompts/${sessionId}"], a.name-btn[href*="/prompts/${sessionId}"], a[href*="/prompts/${sessionId}"]`,
+    )
+    const title = link?.textContent?.trim()
+    return title || null
+  }
+
+  getSessionName(): string | null {
+    return this.getCurrentConversationTitleFromSources()
   }
 
   getConversationTitle(): string | null {
-    // 尝试从页面标题获取
-    const title = document.title
-    if (title && !title.includes(DEFAULT_TITLE)) {
-      return title.replace(` | ${DEFAULT_TITLE}`, "").trim()
-    }
-    return null
+    return this.getCurrentConversationTitleFromSources()
   }
 
   // ==================== 输入框操作 ====================
@@ -1423,6 +1450,10 @@ export class AIStudioAdapter extends SiteAdapter {
   private lastSessionIdForCache: string | null = null
 
   extractUserQueryText(element: Element): string {
+    if (this.isExportSnapshotElement(element)) {
+      return element.textContent?.trim() || ""
+    }
+
     // 检查会话变更并清理缓存
     const currentSessionId = this.getSessionId()
     if (this.lastSessionIdForCache !== currentSessionId) {
@@ -1444,9 +1475,9 @@ export class AIStudioAdapter extends SiteAdapter {
     //     > ms-prompt-chunk.text-chunk (实际用户输入)
     //
     // 必须精确定位到 ms-prompt-chunk.text-chunk，避免抓取按钮和标签文本
-    const contentChunk = element.querySelector("ms-prompt-chunk.text-chunk, ms-prompt-chunk")
+    const contentChunk = this.findUserContentChunk(element)
     if (contentChunk) {
-      extractedText = contentChunk.textContent?.trim() || ""
+      extractedText = this.extractTextWithLineBreaks(contentChunk).trim()
     } else {
       // 回退：尝试从 .turn-content 中排除 .author-label
       const turnContent = element.querySelector(".turn-content")
@@ -1495,14 +1526,76 @@ export class AIStudioAdapter extends SiteAdapter {
     return ""
   }
 
+  private findUserContentChunk(element: Element): Element | null {
+    const selectors = [
+      "ms-text-chunk",
+      "ms-prompt-chunk.text-chunk",
+      "ms-prompt-chunk",
+      "ms-cmark-node.cmark-node.user-chunk",
+    ]
+
+    for (const selector of selectors) {
+      const candidate = element.querySelector(selector)
+      if (!candidate) continue
+
+      const text = this.extractTextWithLineBreaks(candidate).trim()
+      if (text) {
+        return candidate
+      }
+    }
+
+    return null
+  }
+
   getExportConfig(): ExportConfig | null {
+    if (this.exportSnapshotActive) {
+      return {
+        userQuerySelector: AISTUDIO_EXPORT_USER_SELECTOR,
+        assistantResponseSelector: AISTUDIO_EXPORT_ASSISTANT_SELECTOR,
+        turnSelector: AISTUDIO_EXPORT_TURN_SELECTOR,
+        useShadowDOM: false,
+      }
+    }
+
     return {
       userQuerySelector: this.getUserQuerySelector(),
       // AI 回复容器 - 同样只用顶级容器
-      assistantResponseSelector: ".chat-turn-container.model",
-      turnSelector: ".chat-turn-container",
+      assistantResponseSelector: AISTUDIO_ASSISTANT_SELECTOR,
+      turnSelector: null,
       useShadowDOM: false,
     }
+  }
+
+  async prepareConversationExport(context: ExportLifecycleContext): Promise<unknown> {
+    this.exportIncludeThoughtsOverride = context.includeThoughts
+    this.clearExportSnapshot()
+
+    const scrollContainer =
+      this.getScrollContainer() || document.querySelector(this.getResponseContainerSelector())
+    const exportRoot =
+      document.querySelector(this.getResponseContainerSelector()) ||
+      document.querySelector("main") ||
+      document.body
+
+    const messages =
+      scrollContainer instanceof HTMLElement
+        ? await this.collectExportMessageSnapshots(scrollContainer)
+        : this.readVisibleExportMessageSnapshots(exportRoot)
+
+    if (messages.length === 0) {
+      return null
+    }
+
+    this.mountExportSnapshot(messages)
+    return { count: messages.length }
+  }
+
+  async restoreConversationAfterExport(
+    _context: ExportLifecycleContext,
+    _state: unknown,
+  ): Promise<void> {
+    this.clearExportSnapshot()
+    this.exportIncludeThoughtsOverride = null
   }
 
   extractOutline(maxLevel = 6, includeUserQueries = false, showWordCount = false): OutlineItem[] {
@@ -1856,32 +1949,37 @@ export class AIStudioAdapter extends SiteAdapter {
 
   // ==================== 复制最新回复 ====================
 
-  private extractAssistantResponseMarkdown(element: Element): string {
-    const markdownNodes = Array.from(element.querySelectorAll("ms-cmark-node")).filter(
-      (node) => !node.closest("ms-thought-chunk") && !node.parentElement?.closest("ms-cmark-node"),
-    )
-
-    if (markdownNodes.length > 0) {
-      const wrapper = document.createElement("div")
-      markdownNodes.forEach((node) => wrapper.appendChild(node.cloneNode(true)))
-
-      const markdown = htmlToMarkdown(wrapper).trim()
-      if (markdown) {
-        return markdown
-      }
-
-      const text = this.extractTextWithLineBreaks(wrapper).trim()
-      if (text) {
-        return text
-      }
+  extractAssistantResponseText(element: Element): string {
+    if (this.isExportSnapshotElement(element)) {
+      return element.textContent?.trim() || ""
     }
 
+    const sanitized = element.cloneNode(true) as HTMLElement
+    const includeThoughts = this.shouldIncludeThoughtsInExport()
+    const thoughtBlocks = includeThoughts
+      ? this.extractThoughtBlockquotesFromElement(sanitized)
+      : []
+
+    sanitized.querySelectorAll(AISTUDIO_THOUGHT_SELECTOR).forEach((node) => node.remove())
+
+    const normalizedBody = this.extractAssistantResponseMarkdown(sanitized).trim()
+    if (thoughtBlocks.length > 0) {
+      const thoughtSection = thoughtBlocks.join("\n\n")
+      return normalizedBody ? `${thoughtSection}\n\n${normalizedBody}` : thoughtSection
+    }
+
+    return normalizedBody
+  }
+
+  private extractAssistantResponseMarkdown(element: Element): string {
     const clone = element.cloneNode(true) as HTMLElement
     clone
       .querySelectorAll(
-        'ms-thought-chunk, .author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"]',
+        `${AISTUDIO_THOUGHT_SELECTOR}, .author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"]`,
       )
       .forEach((node) => node.remove())
+
+    this.normalizeAssistantExportDom(clone)
 
     const markdown = htmlToMarkdown(clone).trim()
     if (markdown) {
@@ -1891,16 +1989,505 @@ export class AIStudioAdapter extends SiteAdapter {
     return this.extractTextWithLineBreaks(clone).trim()
   }
 
+  private shouldIncludeThoughtsInExport(): boolean {
+    if (typeof this.exportIncludeThoughtsOverride === "boolean") {
+      return this.exportIncludeThoughtsOverride
+    }
+    return false
+  }
+
+  private extractThoughtBlockquotesFromElement(element: Element): string[] {
+    const thoughtChunks = Array.from(element.querySelectorAll(AISTUDIO_THOUGHT_SELECTOR))
+    const blocks: string[] = []
+
+    thoughtChunks.forEach((chunk) => {
+      const content = this.extractThoughtMarkdown(chunk).trim()
+      if (!content) return
+      blocks.push(this.formatAsThoughtBlockquote(content))
+    })
+
+    return blocks
+  }
+
+  private extractThoughtMarkdown(element: Element): string {
+    const clone = element.cloneNode(true) as HTMLElement
+    clone
+      .querySelectorAll(
+        '.author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"]',
+      )
+      .forEach((node) => node.remove())
+
+    this.normalizeAssistantExportDom(clone)
+
+    const markdown = htmlToMarkdown(clone).trim()
+    if (markdown) {
+      return markdown
+    }
+
+    return this.extractTextWithLineBreaks(clone).trim()
+  }
+
+  private normalizeAssistantExportDom(root: HTMLElement): void {
+    this.unwrapCmarkNodes(root)
+    this.replaceInlineCodeSpans(root)
+    this.replaceCodeBlockComponents(root)
+  }
+
+  private unwrapCmarkNodes(root: HTMLElement): void {
+    const nodes = Array.from(root.querySelectorAll("ms-cmark-node"))
+    nodes.forEach((node) => {
+      if (!(node instanceof HTMLElement) || !node.parentNode) return
+      node.replaceWith(...Array.from(node.childNodes))
+    })
+  }
+
+  private replaceInlineCodeSpans(root: HTMLElement): void {
+    root.querySelectorAll(".inline-code").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return
+      if (node.tagName.toLowerCase() === "code") return
+
+      const code = document.createElement("code")
+      code.textContent = node.textContent || ""
+      node.replaceWith(code)
+    })
+  }
+
+  private replaceCodeBlockComponents(root: HTMLElement): void {
+    root.querySelectorAll("ms-code-block").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return
+
+      const extracted = this.extractCodeBlockFromComponent(node)
+      if (!extracted) {
+        return
+      }
+
+      const pre = document.createElement("pre")
+      const code = document.createElement("code")
+      if (extracted.language) {
+        code.className = `language-${extracted.language}`
+      }
+      code.textContent = extracted.code
+      pre.appendChild(code)
+      node.replaceWith(pre)
+    })
+  }
+
+  private extractCodeBlockFromComponent(
+    element: HTMLElement,
+  ): { language: string; code: string } | null {
+    const codeElement =
+      (element.querySelector("pre code") as HTMLElement | null) ||
+      (element.querySelector("pre") as HTMLElement | null)
+
+    const code = codeElement?.textContent?.replace(/\r\n/g, "\n").replace(/\n+$/, "") || ""
+    if (!code.trim()) {
+      return null
+    }
+
+    const languageCandidates = [
+      element.getAttribute("data-test-language"),
+      element.getAttribute("data-language"),
+      element.querySelector(".mat-expansion-panel-header-title .ng-star-inserted:last-child")
+        ?.textContent,
+    ]
+
+    const language =
+      languageCandidates
+        .map((candidate) => candidate?.trim().toLowerCase() || "")
+        .find((candidate) => candidate && candidate !== "code") || ""
+
+    return { language, code }
+  }
+
+  private formatAsThoughtBlockquote(markdown: string): string {
+    const lines = markdown.replace(/\r\n/g, "\n").split("\n")
+    const quotedLines = lines.map((line) => (line.trim().length > 0 ? `> ${line}` : ">"))
+    return ["> [Thoughts]", ...quotedLines].join("\n")
+  }
+
   getLatestReplyText(): string | null {
+    const prevOverride = this.exportIncludeThoughtsOverride
+    this.exportIncludeThoughtsOverride = false
+
     // AI 回复容器
     const aiMessages = document.querySelectorAll(
-      ".chat-turn-container.model, .model-prompt-container",
+      `${AISTUDIO_ASSISTANT_SELECTOR}, .model-prompt-container`,
     )
-    if (aiMessages.length === 0) return null
 
-    const lastMessage = aiMessages[aiMessages.length - 1]
-    const text = this.extractAssistantResponseMarkdown(lastMessage)
-    return text || null
+    try {
+      for (let i = aiMessages.length - 1; i >= 0; i -= 1) {
+        const text = this.extractAssistantResponseText(aiMessages[i]).trim()
+        if (text) {
+          return text
+        }
+      }
+
+      return null
+    } finally {
+      this.exportIncludeThoughtsOverride = prevOverride
+    }
+  }
+
+  private isExportSnapshotElement(element: Element): boolean {
+    return element.hasAttribute(AISTUDIO_EXPORT_ROLE_ATTR)
+  }
+
+  private async collectExportMessageSnapshots(
+    scrollContainer: HTMLElement,
+  ): Promise<AIStudioExportMessageSnapshot[]> {
+    const positions = this.buildExportSnapshotPositions(scrollContainer)
+    const originalScrollTop = scrollContainer.scrollTop
+    let collected: AIStudioExportMessageSnapshot[] = []
+
+    try {
+      for (const top of positions) {
+        scrollContainer.scrollTop = top
+        scrollContainer.dispatchEvent(new Event("scroll", { bubbles: true }))
+        scrollContainer.getBoundingClientRect()
+        await this.sleep(80)
+
+        const batch = this.readVisibleExportMessageSnapshots(scrollContainer)
+        collected = this.mergeExportMessageBatch(collected, batch)
+      }
+    } finally {
+      scrollContainer.scrollTop = originalScrollTop
+      scrollContainer.dispatchEvent(new Event("scroll", { bubbles: true }))
+    }
+
+    return this.repairLikelyTruncatedUserSnapshots(collected, scrollContainer)
+  }
+
+  private buildExportSnapshotPositions(scrollContainer: HTMLElement): number[] {
+    const maxScroll = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const currentScrollTop = scrollContainer.scrollTop
+
+    if (maxScroll <= 0) {
+      return [currentScrollTop]
+    }
+
+    const step = Math.max(160, Math.floor(scrollContainer.clientHeight * 0.75))
+    const positions = new Set<number>([0, currentScrollTop, maxScroll])
+
+    for (let top = 0; top < maxScroll; top += step) {
+      positions.add(top)
+    }
+
+    return Array.from(positions).sort((a, b) => a - b)
+  }
+
+  private readVisibleExportMessageSnapshots(
+    container: ParentNode,
+  ): AIStudioExportMessageSnapshot[] {
+    const turns = Array.from(container.querySelectorAll(AISTUDIO_TURN_SELECTOR)).filter(
+      (turn): turn is HTMLElement =>
+        turn instanceof HTMLElement && !turn.closest(`[${AISTUDIO_EXPORT_ROOT_ATTR}]`),
+    )
+
+    return turns.flatMap((turn) => this.extractExportSnapshotsFromTurn(turn, container))
+  }
+
+  private extractExportSnapshotsFromTurn(
+    turn: HTMLElement,
+    container: ParentNode,
+  ): AIStudioExportMessageSnapshot[] {
+    const snapshots: AIStudioExportMessageSnapshot[] = []
+    const baseOrder = this.getTurnRenderOrder(turn, container)
+
+    const userContainer = this.getUserContainerForTurn(turn)
+    if (userContainer) {
+      const content = this.normalizeExportMessageContent(
+        this.extractUserQueryMarkdown(userContainer),
+      )
+      if (content) {
+        snapshots.push({
+          role: AISTUDIO_EXPORT_ROLE_USER,
+          turnKey: this.getExportTurnKey(turn, "user", content),
+          order: baseOrder,
+          content,
+        })
+      }
+    }
+
+    const assistantFragments = this.getAssistantFragmentsForTurn(turn)
+    if (assistantFragments.length > 0) {
+      let content = ""
+      assistantFragments.forEach((fragment) => {
+        const fragmentContent = this.normalizeExportMessageContent(
+          this.extractAssistantResponseText(fragment),
+        )
+        content = this.mergeSnapshotContent(content, fragmentContent)
+      })
+
+      if (content) {
+        snapshots.push({
+          role: AISTUDIO_EXPORT_ROLE_ASSISTANT,
+          turnKey: this.getExportTurnKey(turn, "assistant", content),
+          order: baseOrder + 0.5,
+          content,
+        })
+      }
+    }
+
+    return snapshots
+  }
+
+  private getTurnRenderOrder(turn: HTMLElement, container: ParentNode): number {
+    const turnRect = turn.getBoundingClientRect()
+    if (container instanceof HTMLElement) {
+      const containerRect = container.getBoundingClientRect()
+      return container.scrollTop + (turnRect.top - containerRect.top)
+    }
+
+    return window.scrollY + turnRect.top
+  }
+
+  private getUserContainerForTurn(turn: HTMLElement): HTMLElement | null {
+    const candidates = Array.from(turn.querySelectorAll(".chat-turn-container.user")).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element.closest(AISTUDIO_TURN_SELECTOR) === turn,
+    )
+    return candidates[0] || null
+  }
+
+  private getAssistantFragmentsForTurn(turn: HTMLElement): HTMLElement[] {
+    return Array.from(turn.querySelectorAll(AISTUDIO_ASSISTANT_FRAGMENT_SELECTOR)).filter(
+      (element): element is HTMLElement => {
+        if (!(element instanceof HTMLElement)) return false
+        if (element.closest(AISTUDIO_TURN_SELECTOR) !== turn) return false
+
+        const parentFragment = element.parentElement?.closest(AISTUDIO_ASSISTANT_FRAGMENT_SELECTOR)
+        return parentFragment?.closest(AISTUDIO_TURN_SELECTOR) !== turn
+      },
+    )
+  }
+
+  private getExportTurnKey(message: Element, role: "user" | "assistant", content: string): string {
+    const turnId = message
+      .closest("ms-chat-turn")
+      ?.id?.replace(/^turn-/, "")
+      .trim()
+    if (turnId) {
+      return `${role}:${turnId}`
+    }
+
+    const normalizedContent = content.replace(/\s+/g, " ").trim().slice(0, 120)
+    return `${role}:content:${normalizedContent}`
+  }
+
+  private mergeSnapshotContent(previous: string, current: string): string {
+    if (!current) {
+      return previous
+    }
+
+    if (!previous) {
+      return current
+    }
+
+    if (previous === current || previous.includes(current)) {
+      return previous
+    }
+
+    if (current.includes(previous)) {
+      return current
+    }
+
+    const normalizedPrevious = this.normalizeSnapshotComparisonText(previous)
+    const normalizedCurrent = this.normalizeSnapshotComparisonText(current)
+
+    if (normalizedPrevious && normalizedCurrent) {
+      if (normalizedCurrent.startsWith(normalizedPrevious) && current.length >= previous.length) {
+        return current
+      }
+
+      if (normalizedPrevious.startsWith(normalizedCurrent) && previous.length >= current.length) {
+        return previous
+      }
+    }
+
+    return `${previous}\n\n${current}`.trim()
+  }
+
+  private async repairLikelyTruncatedUserSnapshots(
+    collected: AIStudioExportMessageSnapshot[],
+    scrollContainer: HTMLElement,
+  ): Promise<AIStudioExportMessageSnapshot[]> {
+    const targets = collected.filter((snapshot) => this.isLikelyTruncatedUserSnapshot(snapshot))
+    if (targets.length === 0) {
+      return collected
+    }
+
+    const repaired = collected.map((item) => ({ ...item }))
+    const originalScrollTop = scrollContainer.scrollTop
+
+    try {
+      for (const target of targets) {
+        const start = Math.max(0, target.order - Math.max(120, scrollContainer.clientHeight * 0.25))
+        const end = target.order + Math.max(120, scrollContainer.clientHeight * 0.25)
+        const positions = [start, target.order, end].map((value) => Math.round(value))
+
+        for (const position of positions) {
+          scrollContainer.scrollTop = position
+          scrollContainer.dispatchEvent(new Event("scroll", { bubbles: true }))
+          scrollContainer.getBoundingClientRect()
+          await this.sleep(120)
+
+          const batch = this.readVisibleExportMessageSnapshots(scrollContainer)
+          const candidate = batch.find((item) => item.turnKey === target.turnKey)
+          if (!candidate) {
+            continue
+          }
+
+          const repairedIndex = repaired.findIndex((item) => item.turnKey === target.turnKey)
+          if (repairedIndex === -1) {
+            break
+          }
+
+          repaired[repairedIndex] = {
+            ...repaired[repairedIndex],
+            order: Math.min(repaired[repairedIndex].order, candidate.order),
+            content: this.mergeSnapshotContent(repaired[repairedIndex].content, candidate.content),
+          }
+
+          if (!this.isLikelyTruncatedUserSnapshot(repaired[repairedIndex])) {
+            break
+          }
+        }
+      }
+    } finally {
+      scrollContainer.scrollTop = originalScrollTop
+      scrollContainer.dispatchEvent(new Event("scroll", { bubbles: true }))
+    }
+
+    return repaired
+  }
+
+  private isLikelyTruncatedUserSnapshot(snapshot: AIStudioExportMessageSnapshot): boolean {
+    if (snapshot.role !== AISTUDIO_EXPORT_ROLE_USER) {
+      return false
+    }
+
+    const text = snapshot.content.trim()
+    return /(?:\.{3}|…)$/.test(text)
+  }
+
+  private normalizeSnapshotComparisonText(content: string): string {
+    return content
+      .replace(/\r\n/g, "\n")
+      .replace(/\u2026/g, "...")
+      .replace(/\.{3}\s*$/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  }
+
+  private normalizeExportMessageContent(content: string): string {
+    return content
+      .replace(/\r\n/g, "\n")
+      .replace(/\u00a0/g, " ")
+      .trim()
+  }
+
+  private mergeExportMessageBatch(
+    collected: AIStudioExportMessageSnapshot[],
+    batch: AIStudioExportMessageSnapshot[],
+  ): AIStudioExportMessageSnapshot[] {
+    if (batch.length === 0) {
+      return collected
+    }
+
+    if (collected.length === 0) {
+      return batch.map((item) => ({ ...item }))
+    }
+
+    const merged = collected.map((item) => ({ ...item }))
+    let anchorIndex: number | null = null
+
+    for (let batchIndex = 0; batchIndex < batch.length; batchIndex += 1) {
+      const item = batch[batchIndex]
+      const existingIndex = merged.findIndex((entry) => entry.turnKey === item.turnKey)
+
+      if (existingIndex !== -1) {
+        const existing = merged[existingIndex]
+        merged[existingIndex] = {
+          ...existing,
+          order: Math.min(existing.order, item.order),
+          content: this.mergeSnapshotContent(existing.content, item.content),
+        }
+        anchorIndex = existingIndex
+        continue
+      }
+
+      const nextKnownIndex = this.findNextKnownSnapshotIndex(merged, batch, batchIndex + 1)
+      let insertIndex = merged.length
+
+      if (anchorIndex !== null) {
+        insertIndex = anchorIndex + 1
+        if (nextKnownIndex !== null && insertIndex > nextKnownIndex) {
+          insertIndex = nextKnownIndex
+        }
+      } else if (nextKnownIndex !== null) {
+        insertIndex = nextKnownIndex
+      }
+
+      merged.splice(insertIndex, 0, { ...item })
+      anchorIndex = insertIndex
+    }
+
+    return merged
+  }
+
+  private findNextKnownSnapshotIndex(
+    merged: AIStudioExportMessageSnapshot[],
+    batch: AIStudioExportMessageSnapshot[],
+    startIndex: number,
+  ): number | null {
+    for (let index = startIndex; index < batch.length; index += 1) {
+      const turnKey = batch[index].turnKey
+      const knownIndex = merged.findIndex((entry) => entry.turnKey === turnKey)
+      if (knownIndex !== -1) {
+        return knownIndex
+      }
+    }
+
+    return null
+  }
+
+  private mountExportSnapshot(messages: AIStudioExportMessageSnapshot[]): void {
+    this.clearExportSnapshot()
+
+    const root = document.createElement("div")
+    root.setAttribute(AISTUDIO_EXPORT_ROOT_ATTR, "1")
+    root.style.display = "none"
+
+    messages.forEach((message) => {
+      const turn = document.createElement("div")
+      turn.setAttribute(AISTUDIO_EXPORT_TURN_ATTR, "1")
+
+      const node = document.createElement("div")
+      node.setAttribute(AISTUDIO_EXPORT_ROLE_ATTR, message.role)
+      node.textContent = message.content
+      turn.appendChild(node)
+      root.appendChild(turn)
+    })
+
+    document.body.appendChild(root)
+    this.exportSnapshotRoot = root
+    this.exportSnapshotActive = true
+  }
+
+  private clearExportSnapshot(): void {
+    this.exportSnapshotActive = false
+    const root = this.exportSnapshotRoot
+    this.exportSnapshotRoot = null
+
+    if (root?.isConnected) {
+      root.remove()
+    }
+
+    document.querySelectorAll(`[${AISTUDIO_EXPORT_ROOT_ATTR}]`).forEach((node) => {
+      if (node !== root) {
+        node.parentNode?.removeChild(node)
+      }
+    })
   }
 
   // ==================== 新对话按钮 ====================

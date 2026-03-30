@@ -928,7 +928,8 @@ export class ConversationManager {
       return existing || null
     }
 
-    const title = currentInfo.title?.trim() || existing?.title || t("untitledConversation")
+    // 导出时优先保留已同步到会话库中的原始标题，避免当前页面被标签页重命名后的 title 回写污染。
+    const title = existing?.title?.trim() || currentInfo.title?.trim() || t("untitledConversation")
     const url = currentInfo.url || existing?.url || window.location.href
     const cid = currentInfo.cid ?? existing?.cid
     const pinned = currentInfo.isPinned ?? existing?.pinned ?? false
@@ -937,7 +938,7 @@ export class ConversationManager {
       const updates: Partial<Conversation> = {}
       let needsUpdate = false
 
-      if (title !== existing.title) {
+      if (!existing.title?.trim() && title !== existing.title) {
         updates.title = title
         needsUpdate = true
       }
@@ -1154,7 +1155,87 @@ export class ConversationManager {
       return messages
     }
 
-    const { userQuerySelector, assistantResponseSelector, useShadowDOM } = config
+    const { userQuerySelector, assistantResponseSelector, turnSelector, useShadowDOM } = config
+
+    if (turnSelector) {
+      const turns =
+        (DOMToolkit.query(turnSelector, {
+          all: true,
+          shadow: useShadowDOM,
+        }) as Element[]) || []
+
+      if (turns.length > 0) {
+        const collectTurnMatches = (turn: Element, selector: string): Element[] => {
+          const matches: Element[] = []
+
+          if (turn.matches?.(selector)) {
+            matches.push(turn)
+          }
+
+          const descendants =
+            (DOMToolkit.query(selector, {
+              parent: turn as Node,
+              all: true,
+              shadow: useShadowDOM,
+            }) as Element[]) || []
+
+          descendants.forEach((element) => {
+            if (!matches.includes(element)) {
+              matches.push(element)
+            }
+          })
+
+          return matches
+        }
+
+        const compareDomOrder = (left: Element, right: Element): number => {
+          if (left === right) return 0
+          const position = left.compareDocumentPosition(right)
+          if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1
+          if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1
+          return 0
+        }
+
+        const pushMessage = (role: "user" | "assistant", element: Element) => {
+          if (role === "user") {
+            const userContent = this.siteAdapter.extractUserQueryText(element)
+            messages.push({ role, content: userContent })
+            return
+          }
+
+          const adapterExtract = this.siteAdapter.extractAssistantResponseText
+          const baseExtract = SiteAdapter.prototype.extractAssistantResponseText
+          let aiContent = ""
+          if (adapterExtract && adapterExtract !== baseExtract) {
+            aiContent = adapterExtract.call(this.siteAdapter, element)
+          }
+          if (!aiContent) {
+            aiContent = htmlToMarkdown(element) || element.textContent?.trim() || ""
+          }
+
+          messages.push({ role, content: aiContent })
+        }
+
+        turns.forEach((turn) => {
+          const orderedMessages = [
+            ...collectTurnMatches(turn, userQuerySelector).map((element) => ({
+              role: "user" as const,
+              element,
+            })),
+            ...collectTurnMatches(turn, assistantResponseSelector).map((element) => ({
+              role: "assistant" as const,
+              element,
+            })),
+          ].sort((left, right) => compareDomOrder(left.element, right.element))
+
+          orderedMessages.forEach(({ role, element }) => {
+            pushMessage(role, element)
+          })
+        })
+
+        return messages
+      }
+    }
 
     const userMessages =
       (DOMToolkit.query(userQuerySelector, {
