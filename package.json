@@ -1,7 +1,7 @@
 {
   "name": "ophel",
   "displayName": "Ophel Atlas - AI 对话结构化与导航工具",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "将 AI 对话转化为可阅读、可导航、可复用的知识内容。通过实时大纲、会话文件夹与 Prompt 词库，让对话告别无限滚动，成为可组织、可沉淀的工作流，适用于高频使用 AI 的学习与工作场景。",
   "author": "urzeye",
   "license": "GPL-3.0-only",
@@ -11,15 +11,16 @@
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "plasmo dev",
+    "prepare:mermaid-assets": "node scripts/prepare-mermaid-assets.mjs",
+    "dev": "pnpm prepare:mermaid-assets && plasmo dev",
     "lint": "eslint . --fix",
     "lint:check": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "build": "plasmo build",
-    "build:firefox": "plasmo build --target=firefox-mv3",
-    "build:all": "plasmo build && plasmo build --target=firefox-mv3",
+    "build": "pnpm prepare:mermaid-assets && plasmo build",
+    "build:firefox": "pnpm prepare:mermaid-assets && plasmo build --target=firefox-mv3",
+    "build:all": "pnpm build && pnpm build:firefox",
     "package": "pnpm build && plasmo package",
     "package:firefox": "pnpm build:firefox && node scripts/package-firefox.mjs",
     "package:all": "pnpm package && pnpm package:firefox",
@@ -59,6 +60,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^20.3.1",
+    "@mermaid-js/tiny": "11.13.0",
     "@types/chrome": "^0.0.258",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.19.0",
@@ -129,7 +131,9 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "assets/*",
+          "assets/icon.png",
+          "assets/assistant-mermaid-runner.js",
+          "assets/assistant-mermaid-vendor.js",
           "assets/notification-sounds/*",
           "assets/userscript/*"
         ],

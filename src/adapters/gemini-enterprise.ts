@@ -7,7 +7,9 @@ import { htmlToMarkdown } from "~utils/exporter"
 import { setSafeHTML } from "~utils/trusted-types"
 
 import {
+  findAssistantMermaidBlocks,
   SiteAdapter,
+  type AssistantMermaidBlock,
   type ConversationDeleteTarget,
   type ConversationInfo,
   type ConversationObserverConfig,
@@ -52,6 +54,12 @@ const GEMINI_ENTERPRISE_CANCEL_KEYWORDS = [
 export class GeminiEnterpriseAdapter extends SiteAdapter {
   // 存储 clearOnInit 配置
   private clearOnInit = false
+
+  private cloneWithoutSrOnly(element: Element): Element {
+    const clone = element.cloneNode(true) as Element
+    clone.querySelectorAll(".sr-only").forEach((node) => node.remove())
+    return clone
+  }
 
   match(): boolean {
     return window.location.hostname.includes("business.gemini.google")
@@ -216,12 +224,13 @@ export class GeminiEnterpriseAdapter extends SiteAdapter {
       return this.extractTextWithLineBreaks(ucsSummary)
     }
 
-    const markdown = htmlToMarkdown(markdownDoc).trim()
+    const sanitizedMarkdownDoc = this.cloneWithoutSrOnly(markdownDoc)
+    const markdown = htmlToMarkdown(sanitizedMarkdownDoc).trim()
     if (markdown) {
       return markdown
     }
 
-    return this.extractTextWithLineBreaks(markdownDoc)
+    return this.extractTextWithLineBreaks(sanitizedMarkdownDoc)
   }
 
   getSidebarScrollContainer(): Element | null {
@@ -1085,6 +1094,21 @@ export class GeminiEnterpriseAdapter extends SiteAdapter {
     return this.extractTextWithLineBreaks(element)
   }
 
+  extractAssistantResponseText(element: Element): string {
+    const markdownDoc = this.extractSummaryContent(element)
+    if (!markdownDoc) {
+      return this.extractTextWithLineBreaks(element)
+    }
+
+    const sanitizedMarkdownDoc = this.cloneWithoutSrOnly(markdownDoc)
+    const markdown = htmlToMarkdown(sanitizedMarkdownDoc).trim()
+    if (markdown) {
+      return markdown
+    }
+
+    return this.extractTextWithLineBreaks(sanitizedMarkdownDoc)
+  }
+
   /**
    * 从用户提问元素中提取原始 Markdown 文本
    * Gemini Enterprise：.markdown-document 内部每行是一个 <p> 标签
@@ -1426,6 +1450,35 @@ export class GeminiEnterpriseAdapter extends SiteAdapter {
       turnSelector: ".turn",
       useShadowDOM: true,
     }
+  }
+
+  getAssistantMermaidSupportMode() {
+    return "fallback" as const
+  }
+
+  getAssistantMermaidBlocks(root: ParentNode): AssistantMermaidBlock[] {
+    const summaryRoot =
+      root instanceof Element
+        ? root.matches("ucs-summary")
+          ? root
+          : ((root.closest("ucs-summary") ||
+              DOMToolkit.query("ucs-summary", {
+                parent: root,
+                shadow: true,
+              })) as Element | null)
+        : (DOMToolkit.query("ucs-summary", {
+            parent: root as Node,
+            shadow: true,
+          }) as Element | null) || null
+
+    if (!summaryRoot) {
+      return []
+    }
+
+    const markdownDoc = this.extractSummaryContent(summaryRoot)
+    return markdownDoc
+      ? findAssistantMermaidBlocks(markdownDoc)
+      : findAssistantMermaidBlocks(summaryRoot)
   }
 
   // ==================== 生成状态检测 ====================

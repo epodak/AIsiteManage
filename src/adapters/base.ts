@@ -105,6 +105,173 @@ export interface MarkdownFixerConfig {
   shouldSkip?: (element: HTMLElement) => boolean
 }
 
+export type AssistantMermaidSupportMode = "native" | "fallback" | "unsupported"
+
+export interface AssistantMermaidBlock {
+  element: HTMLElement
+  source: string
+}
+
+const ASSISTANT_MERMAID_SOURCE_PATTERNS = [
+  /^flowchart\b/i,
+  /^graph\b/i,
+  /^sequenceDiagram\b/i,
+  /^classDiagram(?:-v2)?\b/i,
+  /^stateDiagram(?:-v2)?\b/i,
+  /^erDiagram\b/i,
+  /^gantt\b/i,
+  /^gitGraph\b/i,
+]
+
+const ASSISTANT_MERMAID_SOURCE_NORMALIZERS = [
+  { pattern: /^flow\s*-?\s*chart\b/i, replacement: "flowchart" },
+  { pattern: /^sequence\s*-?\s*diagram\b/i, replacement: "sequenceDiagram" },
+  { pattern: /^class\s*-?\s*diagram(?:\s*-\s*|\s+)v2\b/i, replacement: "classDiagram-v2" },
+  { pattern: /^class\s*-?\s*diagram\b/i, replacement: "classDiagram" },
+  { pattern: /^state\s*-?\s*diagram(?:\s*-\s*|\s+)v2\b/i, replacement: "stateDiagram-v2" },
+  { pattern: /^state\s*-?\s*diagram\b/i, replacement: "stateDiagram" },
+  { pattern: /^er\s*-?\s*diagram\b/i, replacement: "erDiagram" },
+  { pattern: /^git\s*-?\s*graph\b/i, replacement: "gitGraph" },
+]
+
+function getFirstMeaningfulMermaidLineIndex(lines: string[]): number {
+  return lines.findIndex((line) => {
+    const trimmed = line.trim()
+    return Boolean(trimmed) && !trimmed.startsWith("%%")
+  })
+}
+
+export function isAssistantMermaidCandidateElement(element: HTMLElement): boolean {
+  const code = (
+    element.matches("code") ? element : element.querySelector("code")
+  ) as HTMLElement | null
+
+  const labels = [
+    element.getAttribute("data-language"),
+    element.getAttribute("data-test-language"),
+    code?.getAttribute("data-language"),
+    code?.getAttribute("data-test-language"),
+    element.className,
+    code?.className,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+
+  return (
+    labels.includes("language-mermaid") ||
+    labels.includes("lang-mermaid") ||
+    /\bmermaid\b/.test(labels)
+  )
+}
+
+export function looksLikeAssistantMermaidSource(source: string): boolean {
+  const normalized = normalizeAssistantMermaidSource(source)
+  if (!normalized) return false
+
+  const firstMeaningfulLine = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("%%"))
+
+  if (!firstMeaningfulLine) return false
+
+  return ASSISTANT_MERMAID_SOURCE_PATTERNS.some((pattern) => pattern.test(firstMeaningfulLine))
+}
+
+export function normalizeAssistantMermaidSource(source: string): string {
+  const normalized = source.replace(/\r\n/g, "\n").replace(/\n+$/, "").trim()
+  if (!normalized) return ""
+
+  const lines = normalized.split("\n")
+  const firstMeaningfulLineIndex = getFirstMeaningfulMermaidLineIndex(lines)
+  if (firstMeaningfulLineIndex === -1) {
+    return normalized
+  }
+
+  const originalLine = lines[firstMeaningfulLineIndex]
+  const trimmedLine = originalLine.trim()
+  const leadingWhitespace = originalLine.match(/^\s*/)?.[0] || ""
+
+  for (const { pattern, replacement } of ASSISTANT_MERMAID_SOURCE_NORMALIZERS) {
+    const match = trimmedLine.match(pattern)
+    if (!match) continue
+
+    lines[firstMeaningfulLineIndex] =
+      `${leadingWhitespace}${replacement}${trimmedLine.slice(match[0].length)}`
+    return lines.join("\n")
+  }
+
+  return normalized
+}
+
+export function extractAssistantMermaidSourceFromElement(element: HTMLElement): string | null {
+  const code = (
+    element.matches("code") ? element : element.querySelector("code")
+  ) as HTMLElement | null
+  const source = (code?.textContent || element.textContent || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n+$/, "")
+    .trim()
+
+  return source || null
+}
+
+function resolveAssistantMermaidBlockElement(candidate: HTMLElement): HTMLElement | null {
+  const structuredCodeBlock = candidate.closest(
+    "code-block, ms-code-block, ucs-code-block",
+  ) as HTMLElement | null
+  if (structuredCodeBlock) {
+    return structuredCodeBlock
+  }
+
+  const pre = candidate.closest("pre") as HTMLElement | null
+  if (pre) {
+    return pre
+  }
+
+  const codeMirrorBlock = candidate.closest(".cm-editor, #code-block-viewer") as HTMLElement | null
+  if (codeMirrorBlock) {
+    return codeMirrorBlock
+  }
+
+  return candidate
+}
+
+export function findAssistantMermaidBlocks(root: ParentNode): AssistantMermaidBlock[] {
+  const candidates =
+    (DOMToolkit.query(
+      "code-block, ms-code-block, pre, pre code, [data-language], [data-test-language], [data-test-id='code-content'], .cm-content, #code-block-viewer",
+      {
+        parent: root as Node,
+        all: true,
+        shadow: true,
+      },
+    ) as Element[]) || []
+
+  const seen = new Set<HTMLElement>()
+  const blocks: AssistantMermaidBlock[] = []
+
+  for (const candidate of candidates) {
+    if (!(candidate instanceof HTMLElement)) continue
+    if (candidate.closest(".gh-assistant-mermaid")) continue
+
+    const block = resolveAssistantMermaidBlockElement(candidate)
+    if (!block || seen.has(block)) continue
+
+    const source = extractAssistantMermaidSourceFromElement(block)
+    if (!source) continue
+    if (!isAssistantMermaidCandidateElement(block) && !looksLikeAssistantMermaidSource(source)) {
+      continue
+    }
+
+    seen.add(block)
+    blocks.push({ element: block, source })
+  }
+
+  return blocks
+}
+
 // ==================== SiteAdapter 基类 ====================
 
 export abstract class SiteAdapter {
@@ -348,6 +515,19 @@ export abstract class SiteAdapter {
   /** 获取 Markdown 修复器配置（子类可覆盖） */
   getMarkdownFixerConfig(): MarkdownFixerConfig | null {
     return null
+  }
+
+  /** 获取 AI 回复 Mermaid 渲染支持模式 */
+  getAssistantMermaidSupportMode(): AssistantMermaidSupportMode {
+    return "native"
+  }
+
+  /**
+   * 查找 AI 回复中的 Mermaid 代码块。
+   * 子类可覆盖以适配非标准代码块结构。
+   */
+  getAssistantMermaidBlocks(root: ParentNode): AssistantMermaidBlock[] {
+    return findAssistantMermaidBlocks(root)
   }
 
   // ==================== 输入框操作 ====================
@@ -1518,16 +1698,26 @@ export abstract class SiteAdapter {
 
   protected shouldIncludeAssistantResponseElement(element: Element): boolean {
     return (
-      !element.closest(".gh-root, .gh-user-query-markdown, .gh-markdown-preview") &&
-      this.isElementVisible(element)
+      !element.closest(
+        ".gh-root, .gh-user-query-markdown, .gh-markdown-preview, .gh-assistant-mermaid",
+      ) && this.isElementVisible(element)
     )
   }
 
   protected shouldIncludeCodeElement(element: Element): boolean {
     return (
-      !element.closest(".gh-root, .gh-user-query-markdown, .gh-markdown-preview") &&
-      this.isElementVisible(element)
+      !element.closest(
+        ".gh-root, .gh-user-query-markdown, .gh-markdown-preview, .gh-assistant-mermaid",
+      ) && this.isElementVisible(element)
     )
+  }
+
+  protected isAssistantMermaidCandidate(element: HTMLElement): boolean {
+    return isAssistantMermaidCandidateElement(element)
+  }
+
+  protected extractAssistantMermaidSource(element: HTMLElement): string | null {
+    return extractAssistantMermaidSourceFromElement(element)
   }
 
   protected navigateToNewConversationUrl(): boolean {

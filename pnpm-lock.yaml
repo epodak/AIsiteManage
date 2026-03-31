@@ -66,6 +66,9 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^20.3.1
         version: 20.3.1
+      '@mermaid-js/tiny':
+        specifier: 11.13.0
+        version: 11.13.0
       '@types/chrome':
         specifier: ^0.0.258
         version: 0.0.258
@@ -1219,6 +1222,9 @@ packages:
     peerDependenciesMeta:
       markdown-it:
         optional: true
+
+  '@mermaid-js/tiny@11.13.0':
+    resolution: {integrity: sha512-RchQLcT7gicWzVg4J2ImPop32CzT06pWW8KV2ydlgp+uKmg6nuyP2X9/xEviZHKbSeWRY2pYIYoUDIn2pSX7NA==}
 
   '@mischnic/json-sourcemap@0.1.0':
     resolution: {integrity: sha512-dQb3QnfNqmQNYA4nFSN/uLaByIic58gOXq4Y4XqLOWmOrw73KmJPt/HLyG0wvn1bnR6mBKs/Uwvkh+Hns1T0XA==}
@@ -6310,6 +6316,8 @@ snapshots:
       '@types/markdown-it': 14.1.2
     optionalDependencies:
       markdown-it: 14.1.0
+
+  '@mermaid-js/tiny@11.13.0': {}
 
   '@mischnic/json-sourcemap@0.1.0':
     dependencies:
