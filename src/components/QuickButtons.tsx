@@ -5,6 +5,7 @@ import { ThemeDarkIcon, ThemeLightIcon } from "~components/icons"
 import { LoadingOverlay } from "~components/LoadingOverlay"
 import { Tooltip } from "~components/ui/Tooltip"
 import { COLLAPSED_BUTTON_DEFS, TOOLS_MENU_IDS, TOOLS_MENU_ITEMS } from "~constants"
+import type { ThemeTransitionOrigin } from "~core/theme-manager"
 import { anchorStore } from "~stores/anchor-store"
 import { useSettingsStore } from "~stores/settings-store"
 import { loadHistoryUntil } from "~utils/history-loader"
@@ -21,7 +22,7 @@ import { showToast } from "~utils/toast"
 interface QuickButtonsProps {
   isPanelOpen: boolean
   onPanelToggle: () => void
-  onThemeToggle?: () => void
+  onThemeToggle?: (event?: ThemeTransitionOrigin) => void
   themeMode?: "light" | "dark"
   // 工具栏功能
   onExport?: () => void
@@ -55,6 +56,14 @@ export const QuickButtons: React.FC<QuickButtonsProps> = ({
   onModelLockToggle,
   isModelLocked,
 }) => {
+  const getButtonCenter = useCallback((button: HTMLButtonElement): ThemeTransitionOrigin => {
+    const rect = button.getBoundingClientRect()
+    return {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    }
+  }, [])
+
   const { settings } = useSettingsStore()
   const currentSettings = settings || DEFAULT_SETTINGS
   const adapter = getAdapter()
@@ -242,13 +251,18 @@ export const QuickButtons: React.FC<QuickButtonsProps> = ({
   )
 
   // 按钮点击处理器
-  const buttonActions: Record<string, (e?: React.MouseEvent) => void> = {
+  const buttonActions: Record<string, (e?: React.MouseEvent<HTMLButtonElement>) => void> = {
     scrollTop: scrollToTop,
     scrollBottom: scrollToBottom,
     panel: onPanelToggle,
     anchor: handleAnchorClick,
     theme: (e) => {
       e?.stopPropagation()
+      const button = e?.currentTarget
+      if (button) {
+        onThemeToggle?.(getButtonCenter(button))
+        return
+      }
       onThemeToggle?.()
     },
     floatingToolbar: (e) => {

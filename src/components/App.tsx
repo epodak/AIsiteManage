@@ -14,7 +14,7 @@ import { InlineBookmarkManager } from "~core/inline-bookmark-manager"
 import { OutlineManager, type OutlineNode } from "~core/outline-manager"
 import { AI_STUDIO_SHORTCUT_SYNC_EVENT, PromptManager } from "~core/prompt-manager"
 import { QueueDispatcher } from "~core/queue-dispatcher"
-import { ensureGlobalThemeManager } from "~core/theme-manager"
+import { ensureGlobalThemeManager, type ThemeTransitionOrigin } from "~core/theme-manager"
 import { useShortcuts } from "~hooks/useShortcuts"
 import { useSettingsHydrated, useSettingsStore } from "~stores/settings-store"
 import { useConversationsStore } from "~stores/conversations-store"
@@ -2041,7 +2041,7 @@ export const App = () => {
   // 主题切换（异步处理，支持 View Transitions API 动画）
   // 不在这里更新 React 状态，由 ThemeManager 的 onModeChange 回调在动画完成后统一处理
   const handleThemeToggle = useCallback(
-    async (event?: MouseEvent) => {
+    async (event?: ThemeTransitionOrigin) => {
       await themeManager.toggle(event)
       // 状态更新由 onModeChange 回调处理，不在这里直接更新
       // 这避免了动画完成前触发 React 重渲染导致的闪烁

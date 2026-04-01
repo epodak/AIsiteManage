@@ -17,6 +17,7 @@ import {
 
 export type ThemeMode = "light" | "dark"
 export type ThemePreference = "light" | "dark" | "system"
+export type ThemeTransitionOrigin = Pick<MouseEvent, "clientX" | "clientY">
 
 // Extend Document interface for View Transitions API
 declare global {
@@ -720,7 +721,7 @@ ${cssVars}
     }
   }
 
-  private getTransitionOrigin(event?: MouseEvent) {
+  private getTransitionOrigin(event?: ThemeTransitionOrigin) {
     let x = 95
     let y = 5
     if (event && event.clientX !== undefined) {
@@ -739,7 +740,10 @@ ${cssVars}
     return { x, y }
   }
 
-  private async applyWithTransition(action: () => void, event?: MouseEvent): Promise<boolean> {
+  private async applyWithTransition(
+    action: () => void,
+    event?: ThemeTransitionOrigin,
+  ): Promise<boolean> {
     const { x, y } = this.getTransitionOrigin(event)
 
     document.documentElement.style.setProperty("--theme-x", `${x}%`)
@@ -803,7 +807,7 @@ ${cssVars}
    * 切换主题（User Action）- 带圆形扩散动画
    * @param event 可选的鼠标事件，用于确定动画中心
    */
-  async toggle(event?: MouseEvent): Promise<ThemeMode> {
+  async toggle(event?: ThemeTransitionOrigin): Promise<ThemeMode> {
     // 使用 detectCurrentTheme 统一检测当前主题
     const currentMode = this.preference === "system" ? this.mode : this.detectCurrentTheme()
     const nextMode: ThemeMode = currentMode === "dark" ? "light" : "dark"
@@ -920,7 +924,7 @@ ${cssVars}
    */
   async setMode(
     targetMode: ThemePreference,
-    event?: MouseEvent,
+    event?: ThemeTransitionOrigin,
   ): Promise<{ mode: ThemeMode; animated: boolean }> {
     const normalizedPreference: ThemePreference =
       targetMode === "system" ? "system" : targetMode === "dark" ? "dark" : "light"

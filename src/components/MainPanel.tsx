@@ -20,6 +20,7 @@ import { TAB_IDS } from "~constants"
 import type { ConversationManager } from "~core/conversation-manager"
 import type { OutlineManager } from "~core/outline-manager"
 import type { PromptManager } from "~core/prompt-manager"
+import type { ThemeTransitionOrigin } from "~core/theme-manager"
 import { useDraggable } from "~hooks/useDraggable"
 import { useSettingsStore } from "~stores/settings-store"
 import { attachEditableKeyboardFocusGuard } from "~utils/dom-toolkit"
@@ -43,7 +44,7 @@ interface MainPanelProps {
   conversationManager: ConversationManager
   outlineManager: OutlineManager
   adapter?: SiteAdapter | null
-  onThemeToggle?: () => void
+  onThemeToggle?: (event?: ThemeTransitionOrigin) => void
   themeMode?: "light" | "dark"
   selectedPromptId?: string | null
   onPromptSelect?: (prompt: Prompt | null) => void
@@ -77,6 +78,14 @@ export const MainPanel: React.FC<MainPanelProps> = ({
   onMouseEnter,
   onMouseLeave,
 }) => {
+  const getButtonCenter = useCallback((button: HTMLButtonElement): ThemeTransitionOrigin => {
+    const rect = button.getBoundingClientRect()
+    return {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    }
+  }, [])
+
   const { settings } = useSettingsStore()
   const currentSettings = settings || DEFAULT_SETTINGS
   const tabOrder = currentSettings.features?.order || DEFAULT_SETTINGS.features.order
@@ -377,7 +386,9 @@ export const MainPanel: React.FC<MainPanelProps> = ({
             {onThemeToggle && (
               <Tooltip content={t("toggleTheme")}>
                 <button
-                  onClick={onThemeToggle}
+                  onClick={(event) => {
+                    onThemeToggle?.(getButtonCenter(event.currentTarget))
+                  }}
                   style={{
                     background: "var(--gh-glass-bg, rgba(255,255,255,0.2))",
                     border: "none",
