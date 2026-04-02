@@ -119,8 +119,8 @@ function renderFeaturedSection(featuredSupporters, config, readmePath) {
 
   const cards = featuredSupporters
     .map(
-      (supporter) => `  <tr>
-    <td align="center" width="520">
+      (supporter) => `  <tr style="border: none;">
+    <td align="center" width="520" style="border: none; padding: 0;">
       ${renderImageCell({ ...supporter, readmePath, size: 96 })}
       <br />
       ${renderName(supporter)}
@@ -131,7 +131,12 @@ function renderFeaturedSection(featuredSupporters, config, readmePath) {
 
   return `${config.featuredTitle}
 
-<table align="center">
+<table
+  align="center"
+  border="0"
+  cellpadding="0"
+  cellspacing="0"
+  style="border-collapse: collapse; border: none;">
 ${cards}
 </table>`
 }
@@ -147,7 +152,7 @@ function chunk(items, size) {
 }
 
 function renderSupporterCell(supporter, readmePath) {
-  return `    <td align="center" width="220">
+  return `    <td align="center" width="220" style="border: none; padding: 0 18px;">
       ${renderImageCell({ ...supporter, readmePath })}
       <br />
       ${renderName(supporter)}
@@ -161,7 +166,7 @@ function renderSupportersGrid(supporters, config, readmePath) {
 
   const rows = chunk(supporters, 3)
     .map(
-      (row) => `  <tr>
+      (row) => `  <tr style="border: none;">
 ${row.map((supporter) => renderSupporterCell(supporter, readmePath)).join("\n")}
   </tr>`,
     )
@@ -169,7 +174,12 @@ ${row.map((supporter) => renderSupporterCell(supporter, readmePath)).join("\n")}
 
   return `${config.supportersTitle}
 
-<table align="center">
+<table
+  align="center"
+  border="0"
+  cellpadding="0"
+  cellspacing="0"
+  style="border-collapse: collapse; border: none;">
 ${rows}
 </table>`
 }

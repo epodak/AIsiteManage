@@ -302,9 +302,14 @@ flowchart TB
 
 ### 👼 天使支持特別鳴謝
 
-<table align="center">
-  <tr>
-    <td align="center" width="520">
+<table
+  align="center"
+  border="0"
+  cellpadding="0"
+  cellspacing="0"
+  style="border-collapse: collapse; border: none;">
+  <tr style="border: none;">
+    <td align="center" width="520" style="border: none; padding: 0;">
       <a href="https://github.com/treasuresure"><img src="https://github.com/treasuresure.png?size=160" width="96" height="96" alt="treasuresure" /></a>
       <br />
       <a href="https://github.com/treasuresure"><strong>treasuresure</strong></a>
@@ -314,14 +319,19 @@ flowchart TB
 
 ### 🤝 支持者與朋友
 
-<table align="center">
-  <tr>
-    <td align="center" width="220">
+<table
+  align="center"
+  border="0"
+  cellpadding="0"
+  cellspacing="0"
+  style="border-collapse: collapse; border: none;">
+  <tr style="border: none;">
+    <td align="center" width="220" style="border: none; padding: 0 18px;">
       <img src="https://lh3.googleusercontent.com/a-/ALV-UjVwv0jFS2TRGiNOMB4xl4BXF5j1D5jRIlR6t-4xgaUSpNIsYWc=s96-w96-h96" width="84" height="84" alt="Hugh" />
       <br />
       <strong>Hugh</strong>
     </td>
-    <td align="center" width="220">
+    <td align="center" width="220" style="border: none; padding: 0 18px;">
       <a href="https://github.com/hugo1120"><img src="https://github.com/hugo1120.png?size=160" width="84" height="84" alt="hugo1120" /></a>
       <br />
       <a href="https://github.com/hugo1120"><strong>hugo1120</strong></a>
