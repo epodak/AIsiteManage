@@ -198,93 +198,72 @@ pnpm package:all
 
 ### 💖 특별한 감사
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
-  <tr style="border: none;">
-    <td align="center" width="520" style="border: none; padding: 0;">
-      <a href="https://github.com/treasuresure"><img src="https://github.com/treasuresure.png?size=160" width="96" height="96" alt="treasuresure" /></a>
-      <br />
-      <a href="https://github.com/treasuresure"><strong>treasuresure</strong></a>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="https://github.com/treasuresure"><img src="https://github.com/treasuresure.png?size=160" width="96" height="96" alt="treasuresure" /></a>
+  <br />
+  <a href="https://github.com/treasuresure"><strong>treasuresure</strong></a>
+</p>
 
 ### 🤝 후원자
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
-  <tr style="border: none;">
-    <td align="center" width="220" style="border: none; padding: 0 18px;">
-      <img src="https://lh3.googleusercontent.com/a-/ALV-UjVwv0jFS2TRGiNOMB4xl4BXF5j1D5jRIlR6t-4xgaUSpNIsYWc=s96-w96-h96" width="84" height="84" alt="Hugh" />
+<table align="center">
+  <tr>
+    <td align="center" width="110">
+      <img src="https://lh3.googleusercontent.com/a-/ALV-UjVwv0jFS2TRGiNOMB4xl4BXF5j1D5jRIlR6t-4xgaUSpNIsYWc=s96-w96-h96" width="72" height="72" alt="Hugh" />
       <br />
-      <strong>Hugh</strong>
+      <sub>Hugh</sub>
     </td>
-    <td align="center" width="220" style="border: none; padding: 0 18px;">
-      <a href="https://github.com/hugo1120"><img src="https://github.com/hugo1120.png?size=160" width="84" height="84" alt="hugo2233" /></a>
+    <td align="center" width="110">
+      <a href="https://github.com/hugo1120"><img src="https://github.com/hugo1120.png?size=160" width="72" height="72" alt="hugo2233" /></a>
       <br />
-      <a href="https://github.com/hugo1120"><strong>hugo2233</strong></a>
+      <sub><a href="https://github.com/hugo1120">hugo2233</a></sub>
     </td>
   </tr>
 </table>
 
 ### 🌟 기여자
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
-  <tr style="border: none;">
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/urzeye"><img src="https://avatars.githubusercontent.com/u/20869204?s=64&amp;v=4" width="72" height="72" alt="urzeye" /></a>
+<table align="center">
+  <tr>
+    <td align="center" width="90">
+      <a href="https://github.com/urzeye"><img src="https://avatars.githubusercontent.com/u/20869204?s=64&amp;v=4" width="56" height="56" alt="urzeye" /></a>
       <br />
-      <a href="https://github.com/urzeye"><strong>urzeye</strong></a>
+      <sub><a href="https://github.com/urzeye">urzeye</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/treasuresure"><img src="https://avatars.githubusercontent.com/u/50103468?s=64&amp;v=4" width="72" height="72" alt="treasuresure" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/treasuresure"><img src="https://avatars.githubusercontent.com/u/50103468?s=64&amp;v=4" width="56" height="56" alt="treasuresure" /></a>
       <br />
-      <a href="https://github.com/treasuresure"><strong>treasuresure</strong></a>
+      <sub><a href="https://github.com/treasuresure">treasuresure</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/joevalleyfield"><img src="https://avatars.githubusercontent.com/u/14796422?s=64&amp;v=4" width="72" height="72" alt="joevalleyfield" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/joevalleyfield"><img src="https://avatars.githubusercontent.com/u/14796422?s=64&amp;v=4" width="56" height="56" alt="joevalleyfield" /></a>
       <br />
-      <a href="https://github.com/joevalleyfield"><strong>joevalleyfield</strong></a>
+      <sub><a href="https://github.com/joevalleyfield">joevalleyfield</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/tjsky"><img src="https://avatars.githubusercontent.com/u/7272911?s=64&amp;v=4" width="72" height="72" alt="tjsky" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/tjsky"><img src="https://avatars.githubusercontent.com/u/7272911?s=64&amp;v=4" width="56" height="56" alt="tjsky" /></a>
       <br />
-      <a href="https://github.com/tjsky"><strong>tjsky</strong></a>
+      <sub><a href="https://github.com/tjsky">tjsky</a></sub>
     </td>
-  </tr>
-  <tr style="border: none;">
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/lanvent"><img src="https://avatars.githubusercontent.com/u/26515464?s=64&amp;v=4" width="72" height="72" alt="lanvent" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/lanvent"><img src="https://avatars.githubusercontent.com/u/26515464?s=64&amp;v=4" width="56" height="56" alt="lanvent" /></a>
       <br />
-      <a href="https://github.com/lanvent"><strong>lanvent</strong></a>
+      <sub><a href="https://github.com/lanvent">lanvent</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/KanameMadoka520"><img src="https://avatars.githubusercontent.com/u/90090108?s=64&amp;v=4" width="72" height="72" alt="KanameMadoka520" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/KanameMadoka520"><img src="https://avatars.githubusercontent.com/u/90090108?s=64&amp;v=4" width="56" height="56" alt="KanameMadoka520" /></a>
       <br />
-      <a href="https://github.com/KanameMadoka520"><strong>KanameMadoka520</strong></a>
+      <sub><a href="https://github.com/KanameMadoka520">KanameMadoka520</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/Felix3322"><img src="https://avatars.githubusercontent.com/u/115849429?s=64&amp;v=4" width="72" height="72" alt="Felix3322" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/Felix3322"><img src="https://avatars.githubusercontent.com/u/115849429?s=64&amp;v=4" width="56" height="56" alt="Felix3322" /></a>
       <br />
-      <a href="https://github.com/Felix3322"><strong>Felix3322</strong></a>
+      <sub><a href="https://github.com/Felix3322">Felix3322</a></sub>
     </td>
-    <td align="center" width="160" style="border: none; padding: 0 12px 18px;">
-      <a href="https://github.com/RyanLin-InfEvo"><img src="https://avatars.githubusercontent.com/u/121378653?s=64&amp;v=4" width="72" height="72" alt="RyanLin-InfEvo" /></a>
+    <td align="center" width="90">
+      <a href="https://github.com/RyanLin-InfEvo"><img src="https://avatars.githubusercontent.com/u/121378653?s=64&amp;v=4" width="56" height="56" alt="RyanLin-InfEvo" /></a>
       <br />
-      <a href="https://github.com/RyanLin-InfEvo"><strong>RyanLin-InfEvo</strong></a>
+      <sub><a href="https://github.com/RyanLin-InfEvo">RyanLin-InfEvo</a></sub>
     </td>
   </tr>
 </table>

@@ -104,25 +104,40 @@ function resolveAvatarPath(readmePath, avatar) {
   return ensureRelativePath(relativeAvatarPath.replaceAll(path.sep, "/"))
 }
 
-function renderImageCell({ name, url, avatar, readmePath, size = 84 }) {
+function renderImageCell({ name, url, avatar, readmePath, size = 84, link = true }) {
   const avatarPath = resolveAvatarPath(readmePath, avatar)
   const image = `<img src="${escapeHtml(avatarPath)}" width="${size}" height="${size}" alt="${escapeHtml(name)}" />`
 
-  if (!url) {
+  if (!url || !link) {
     return image
   }
 
   return `<a href="${escapeHtml(url)}">${image}</a>`
 }
 
-function renderName({ name, url }) {
-  const content = `<strong>${escapeHtml(name)}</strong>`
+function renderName({ name, url }, options = {}) {
+  const { strong = true } = options
+  const content = strong ? `<strong>${escapeHtml(name)}</strong>` : escapeHtml(name)
 
   if (!url) {
     return content
   }
 
   return `<a href="${escapeHtml(url)}">${content}</a>`
+}
+
+function renderCompactName(person) {
+  return `<sub>${renderName(person, { strong: false })}</sub>`
+}
+
+function renderPersonCell(person, readmePath, options = {}) {
+  const { width = 96, avatarSize = 56 } = options
+
+  return `    <td align="center" width="${width}">
+      ${renderImageCell({ ...person, readmePath, size: avatarSize })}
+      <br />
+      ${renderCompactName(person)}
+    </td>`
 }
 
 function renderFeaturedSection(featuredSupporters, config, readmePath) {
@@ -132,26 +147,17 @@ function renderFeaturedSection(featuredSupporters, config, readmePath) {
 
   const cards = featuredSupporters
     .map(
-      (supporter) => `  <tr style="border: none;">
-    <td align="center" width="520" style="border: none; padding: 0;">
-      ${renderImageCell({ ...supporter, readmePath, size: 96 })}
-      <br />
-      ${renderName(supporter)}
-    </td>
-  </tr>`,
+      (supporter) => `<p align="center">
+  ${renderImageCell({ ...supporter, readmePath, size: 96 })}
+  <br />
+  ${renderName(supporter)}
+</p>`,
     )
-    .join("\n")
+    .join("\n\n")
 
   return `${config.featuredTitle}
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
-${cards}
-</table>`
+${cards}`
 }
 
 function chunk(items, size) {
@@ -164,37 +170,22 @@ function chunk(items, size) {
   return rows
 }
 
-function renderPersonCell(person, readmePath, options = {}) {
-  const { width = 220, padding = "0 18px", avatarSize = 84 } = options
-
-  return `    <td align="center" width="${width}" style="border: none; padding: ${padding};">
-      ${renderImageCell({ ...person, readmePath, size: avatarSize })}
-      <br />
-      ${renderName(person)}
-    </td>`
-}
-
 function renderSupportersGrid(supporters, config, readmePath) {
   if (supporters.length === 0) {
     return ""
   }
 
-  const rows = chunk(supporters, 3)
+  const rows = chunk(supporters, 10)
     .map(
-      (row) => `  <tr style="border: none;">
-${row.map((supporter) => renderPersonCell(supporter, readmePath)).join("\n")}
+      (row) => `  <tr>
+${row.map((supporter) => renderPersonCell(supporter, readmePath, { width: 110, avatarSize: 72 })).join("\n")}
   </tr>`,
     )
-    .join("\n")
+    .join("\n\n")
 
   return `${config.supportersTitle}
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
+<table align="center">
 ${rows}
 </table>`
 }
@@ -204,30 +195,17 @@ function renderContributorsGrid(contributors, config, readmePath) {
     return ""
   }
 
-  const rows = chunk(contributors, 4)
+  const rows = chunk(contributors, 10)
     .map(
-      (row) => `  <tr style="border: none;">
-${row
-  .map((contributor) =>
-    renderPersonCell(contributor, readmePath, {
-      width: 160,
-      padding: "0 12px 18px",
-      avatarSize: 72,
-    }),
-  )
-  .join("\n")}
+      (row) => `  <tr>
+${row.map((contributor) => renderPersonCell(contributor, readmePath, { width: 90, avatarSize: 56 })).join("\n")}
   </tr>`,
     )
-    .join("\n")
+    .join("\n\n")
 
   return `${config.contributorsTitle}
 
-<table
-  align="center"
-  border="0"
-  cellpadding="0"
-  cellspacing="0"
-  style="border-collapse: collapse; border: none;">
+<table align="center">
 ${rows}
 </table>`
 }
