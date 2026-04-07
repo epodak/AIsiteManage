@@ -29,7 +29,7 @@ body:
           required: true
         - label: 我确认使用的是插件的最新版本 | I confirm I am using the latest version of the extension
           required: true
-        - label: 我已为项目点了 Star 🌟（Star helps support the project）
+        - label: 我已为项目点了 Star 🌟 | I have starred the project 🌟
           required: false
 
   - type: dropdown
