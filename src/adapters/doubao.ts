@@ -15,7 +15,6 @@
  * - 统一使用 chatPathPattern 提取会话 ID
  */
 import { SITE_IDS } from "~constants"
-import { doubaoNativeThemeCss } from "~styles/native-theme-adapters/doubao"
 import { htmlToMarkdown } from "~utils/exporter"
 
 import {
@@ -63,10 +62,6 @@ export class DoubaoAdapter extends SiteAdapter {
 
   getThemeColors(): { primary: string; secondary: string } {
     return { primary: "#315efb", secondary: "#0f6eff" }
-  }
-
-  getNativeThemeCss(): string | null {
-    return doubaoNativeThemeCss
   }
 
   getTextareaSelectors(): string[] {
@@ -1077,7 +1072,11 @@ export class DoubaoAdapter extends SiteAdapter {
         selector: '[data-testid="message-block-container"]',
         property: "--message-block-container-inline-width",
       },
+      // 兼容豆包不同版本的 Tailwind 转义类名
       { selector: ".max-w-\\(--content-max-width\\)", property: "max-width" },
+      { selector: ".max-w-\\[var\\(--content-max-width\\)\\]", property: "max-width" },
+      // 输入框区域会从上层 style 继承 --content-max-width，需要同步覆盖变量本身
+      { selector: '[style*="--content-max-width"]', property: "--content-max-width" },
       // /code/chat 专用结构
       { selector: ".chrome70-container", property: "--center-content-max-width" },
     ]
