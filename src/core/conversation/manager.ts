@@ -928,8 +928,16 @@ export class ConversationManager {
       return existing || null
     }
 
-    // 导出时优先保留已同步到会话库中的原始标题，避免当前页面被标签页重命名后的 title 回写污染。
-    const title = existing?.title?.trim() || currentInfo.title?.trim() || t("untitledConversation")
+    const settings = useSettingsStore.getState().settings
+    const prioritizeTab = settings.export?.filenameSource === "tab"
+
+    // 默认情况下，导出时优先保留已同步到会话库中的原始标题，避免当前页面被标签页重命名后的 title 回写污染。
+    // 如果用户设置优先使用标签页标题，则反转优先级。
+    const baseTitle = prioritizeTab
+      ? currentInfo.title?.trim() || existing?.title?.trim()
+      : existing?.title?.trim() || currentInfo.title?.trim()
+
+    const title = baseTitle || t("untitledConversation")
     const url = currentInfo.url || existing?.url || window.location.href
     const cid = currentInfo.cid ?? existing?.cid
     const pinned = currentInfo.isPinned ?? existing?.pinned ?? false
@@ -938,7 +946,7 @@ export class ConversationManager {
       const updates: Partial<Conversation> = {}
       let needsUpdate = false
 
-      if (!existing.title?.trim() && title !== existing.title) {
+      if (title !== existing.title) {
         updates.title = title
         needsUpdate = true
       }
@@ -1095,7 +1103,17 @@ export class ConversationManager {
 
       const siteName = this.siteAdapter.getName()
       const safeSiteName = siteName.replace(/[<>:"/\\|?*]/g, "_")
-      const filenamePrefix = `${safeSiteName} - `
+
+      // 智能前缀合并：如果标题已包含站点名，则不再重复添加前缀
+      let filenamePrefix = `${safeSiteName} - `
+      if (settings.export?.filenameSmartPrefix !== false) {
+        const normalizedTitle = safeTitle.trim().toLowerCase()
+        const normalizedPrefix = safeSiteName.trim().toLowerCase()
+        // 增强匹配：如果标题中已经包含了站点名（无论位置），则不再添加前缀
+        if (normalizedTitle.includes(normalizedPrefix)) {
+          filenamePrefix = ""
+        }
+      }
 
       if (format === "clipboard") {
         content = formatToMarkdown(metadata, messages)

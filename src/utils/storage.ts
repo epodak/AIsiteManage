@@ -91,6 +91,8 @@ export interface ExportSettings {
   customModelName?: string // 自定义 AI 名称
   exportFilenameTimestamp?: boolean // 导出文件名包含时间戳
   includeThoughts?: boolean // 导出包含思维链
+  filenameSource?: "database" | "tab" // 导出文件名来源：数据库缓存 或 浏览器标签标题
+  filenameSmartPrefix?: boolean // 是否开启智能前缀合并
 }
 
 // AI Studio 设置
@@ -385,6 +387,8 @@ export const DEFAULT_SETTINGS: Settings = {
     customModelName: "",
     exportFilenameTimestamp: false,
     includeThoughts: true,
+    filenameSource: "tab", // 默认为 Tab 标题，实现“所见即所得”
+    filenameSmartPrefix: true,
   },
 
   theme: {

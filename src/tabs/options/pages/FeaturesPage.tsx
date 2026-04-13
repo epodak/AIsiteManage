@@ -1377,6 +1377,39 @@ const FeaturesPage: React.FC<FeaturesPageProps> = ({ siteId, initialTab }) => {
                 )
               }
             />
+
+            <SettingRow
+              label={t("exportFilenameSourceLabel") || "文件名来源"}
+              description={t("exportFilenameSourceDesc") || "选择导出文件名的标题来源"}
+              settingId="export-filename-source">
+              <select
+                className="settings-select"
+                value={settings.export?.filenameSource || "database"}
+                onChange={(e) =>
+                  updateNestedSetting(
+                    "export",
+                    "filenameSource",
+                    e.target.value as "database" | "tab",
+                  )
+                }>
+                <option value="database">{t("exportSourceDatabase") || "数据库缓存"}</option>
+                <option value="tab">{t("exportSourceTab") || "浏览器标签标题"}</option>
+              </select>
+            </SettingRow>
+
+            <ToggleRow
+              label={t("exportFilenameSmartPrefixLabel") || "智能前缀合并"}
+              description={t("exportFilenameSmartPrefixDesc") || "自动检测并合并重复的站点名前缀"}
+              settingId="export-filename-smart-prefix"
+              checked={settings.export?.filenameSmartPrefix ?? true}
+              onChange={() =>
+                updateNestedSetting(
+                  "export",
+                  "filenameSmartPrefix",
+                  !(settings.export?.filenameSmartPrefix ?? true),
+                )
+              }
+            />
           </SettingCard>
         </>
       )}
